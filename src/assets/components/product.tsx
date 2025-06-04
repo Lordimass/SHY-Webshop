@@ -2,12 +2,26 @@ import { useState, useEffect } from 'react';
 
 import "../css/product.css"
 
+export type category = {
+  id: number,
+  name: string
+}
+
 type prodProps = {
   sku: number,
   name: string,
   price: number,
   images: image[],
-  stock: number
+  stock: number,
+  category: category
+}
+
+type basketProdProps = {
+  sku: number,
+  name: string,
+  price: number,
+  images: image[],
+  category: category
 }
 
 export type image = {
@@ -21,7 +35,8 @@ export type productInBasket = {
   name: string,
   price: number,
   basketQuantity: number,
-  images: image[]
+  images: image[],
+  category: category
 }
 
 type checkoutProductParams = {
@@ -32,7 +47,7 @@ type checkoutProductParams = {
   sku?: number
 }
 
-export default function Product({ sku, name, price, images, stock }: prodProps) {
+export default function Product({ sku, name, price, images, stock, category }: prodProps) {
   if (stock < 0) {stock = 0}
 
   function BasketModifier0Quant() { // Simple Add To Basket Button
@@ -162,7 +177,8 @@ export default function Product({ sku, name, price, images, stock }: prodProps) 
         "name": name,
         "price": price,
         "basketQuantity": quant,
-        "images": images
+        "images": images,
+        "category": category
       })
     }
 
@@ -267,7 +283,7 @@ export default function Product({ sku, name, price, images, stock }: prodProps) 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-export function BasketProduct({ sku, name, price, images }: prodProps) {
+export function BasketProduct({ sku, name, price, images }: basketProdProps) {
   function increment() { // Increase quantity of this product
     if (quantity >= max_order) {
       return
@@ -293,11 +309,10 @@ export function BasketProduct({ sku, name, price, images }: prodProps) {
     var basket: Array<productInBasket> = JSON.parse(basketString).basket;
 
     // Find product and set quantity
-    var found: boolean = false
+    // We assume that it will exist in the basket since items are only displayed here if they are
     for (let i = 0; i<basket.length; i++) {
       var item: productInBasket = basket[i]
       if (item.sku == sku) {
-        found = true
         // Just remove it from the basket if 0
         if (quant == 0) {
           basket.splice(i, 1)
@@ -306,16 +321,6 @@ export function BasketProduct({ sku, name, price, images }: prodProps) {
         item.basketQuantity = quant
         break
       }
-    }
-    // If it wasn't found, create it
-    if (!found) {
-      basket.push({
-        "sku": sku,
-        "name": name,
-        "price": price,
-        "basketQuantity": quant,
-        "images": images
-      })
     }
 
     // Save to localStorage

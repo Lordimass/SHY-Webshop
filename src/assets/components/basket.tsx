@@ -1,21 +1,8 @@
-import { Component, ReactElement, useEffect, useState } from "react";
+import { ReactElement, useEffect, useState } from "react";
 import "../css/basket.css"
-import { BasketProduct } from "./product";
+import { BasketProduct, productInBasket } from "./product";
 import { basket_icon } from "../consts";
-
-type productInBasket = {
-    sku: number,
-    name: string,
-    price: number,
-    basketQuantity: number,
-    images: image[]
-}
-
-type image = {
-id: number,
-image_url: string,
-display_order: number
-}
+import ReactGA from "react-ga4"
 
 export default function Basket() {
     function redirectToCheckout() {
@@ -34,18 +21,42 @@ export default function Basket() {
     
     const [basketQuantity, changeBasketQuantity] = useState(0);
     const [basketPrice, changeBasketPrice] = useState("£0.00");
+    const [oldBasketString, setBasket] = useState('{"basket":[]}');
 
     function updateBasketQuantity() {
-        var basketQuantTemp: number = 0
-        var basketPriceTemp: number = 0
+        let basketQuantTemp: number = 0
+        let basketPriceTemp: number = 0
 
         const basketString: string | null = localStorage.getItem("basket");
         if (basketString) {
-            var basket: Array<productInBasket> = JSON.parse(basketString).basket;
-            for (let i=0; i<basket.length; i++) {
-                var item: productInBasket = basket[i];
+            const basket: Array<productInBasket> = JSON.parse(basketString).basket;
+            const oldBasket: Array<productInBasket> = JSON.parse(oldBasketString).basket;
+            for (let i=0; i<basket.length; i++) { // Iterate through items in the basket.
+                const item = basket[i];
                 basketQuantTemp += item.basketQuantity;
                 basketPriceTemp += item.price * item.basketQuantity;
+                
+                // Find product in old basket to trigger analytics events
+                var found = false
+                for (let i=0; i<oldBasket.length; i++) {
+                    const oldItem = basket[i]
+                    if (oldItem.sku == item.sku) {
+                        //console.log("Old Item " + oldItem.basketQuantity + ", New Item " + item.basketQuantity)
+                        const diff = item.basketQuantity - oldItem.basketQuantity
+                        //console.log(diff)
+                        if (diff != 0) {
+                            const diffProd = item
+                            diffProd.basketQuantity = diff
+                            notifyGA4(diffProd)
+                        }
+                        found = true;
+                        break;
+                    }
+                }
+                // Product may not have been found, if so its a new one for the basket.
+                if (!found) {
+                    notifyGA4(item)
+                }
             }
         }
 
@@ -65,6 +76,9 @@ export default function Basket() {
         }
         changeBasketQuantity(basketQuantTemp)
         changeBasketPrice("£" + basketPriceTemp.toFixed(2))
+        if (basketString) {
+            setBasket(basketString)
+        }
     }
 
     function toggleBasket() {
@@ -85,7 +99,7 @@ export default function Basket() {
         }
 
         // Toggle display mode
-        var currentDisplay: string = basket.style.display
+        let currentDisplay: string = basket.style.display
         if (currentDisplay == "flex") {
             basket.style.display = "none"
         } else {
@@ -98,20 +112,21 @@ export default function Basket() {
     // Listen for basket updates
     window.addEventListener("basketUpdate", updateBasketQuantity);
 
-    var basketItems: Array<ReactElement> = []
-    var basket: Array<productInBasket> = []
+    let basketItems: Array<ReactElement> = []
+    let basket: Array<productInBasket> = []
     const basketString: string | null = localStorage.getItem("basket")
     if (basketString) {
         basket = JSON.parse(basketString).basket
     }
     for (let i = 0; i < basket.length; i++) {
-        var prod : productInBasket = basket[i]
+        let prod : productInBasket = basket[i]
         basketItems.push(<BasketProduct 
             key={prod.sku}
             sku={prod.sku}
             name={prod.name}
             price={prod.price}
             images={prod.images}
+            category={prod.category}
         />)
     }
     
@@ -137,5 +152,40 @@ export default function Basket() {
             </div>
         </div>
         </>)
+}
+
+/**
+ * Triggers GA4 events for changed products in the basket.
+ * Negative quantities are used to signify removing products.
+ * @param item The item which has been changed
+ */
+
+function notifyGA4(item: productInBasket) {
+    // Having issues with this triggering many times when it shouldn't really, not sure
+    // why and don't have time to look into it right now
+
+    // Is the debugger behaving weirdly with react rerenders?
+    return
+    console.log(item.sku + " increased by " + item.basketQuantity)
+    const itemGA = {
+        item_id: item.sku,
+        item_name: item.name,
+        price: item.price,
+        quantity: item.basketQuantity
+    }
+    if (item.basketQuantity > 0) { // Added to cart
+        ReactGA.event("add_to_cart", {
+            currency: "GBP",
+            value: item.basketQuantity*item.price,
+            items: [itemGA]
+        })
+    } else if (item.basketQuantity < 0) { // Removed from cart
+        itemGA.quantity *= -1 // Change back to positive
+        ReactGA.event("remove_from_cart", {
+            currency: "GBP",
+            value: item.basketQuantity*item.price*-1,
+            items: [itemGA]
+        })
+    }
 }
 
